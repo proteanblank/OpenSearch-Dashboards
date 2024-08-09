@@ -5,7 +5,7 @@
 
 import { render, waitFor } from '@testing-library/react';
 import React, { ComponentProps } from 'react';
-import { IIndexPattern } from '../../../../common';
+import { of } from 'rxjs';
 import { QueryEditorExtension } from './query_editor_extension';
 
 jest.mock('react-dom', () => ({
@@ -14,21 +14,6 @@ jest.mock('react-dom', () => ({
 }));
 
 type QueryEditorExtensionProps = ComponentProps<typeof QueryEditorExtension>;
-
-const mockIndexPattern = {
-  id: '1234',
-  title: 'logstash-*',
-  fields: [
-    {
-      name: 'response',
-      type: 'number',
-      esTypes: ['integer'],
-      aggregatable: true,
-      filterable: true,
-      searchable: true,
-    },
-  ],
-} as IIndexPattern;
 
 describe('QueryEditorExtension', () => {
   const getComponentMock = jest.fn();
@@ -39,13 +24,15 @@ describe('QueryEditorExtension', () => {
     config: {
       id: 'test-extension',
       order: 1,
-      isEnabled: isEnabledMock,
+      isEnabled$: isEnabledMock,
       getComponent: getComponentMock,
       getBanner: getBannerMock,
     },
     dependencies: {
-      indexPatterns: [mockIndexPattern],
       language: 'Test',
+      onSelectLanguage: jest.fn(),
+      isCollapsed: false,
+      setIsCollapsed: jest.fn(),
     },
     componentContainer: document.createElement('div'),
     bannerContainer: document.createElement('div'),
@@ -56,7 +43,7 @@ describe('QueryEditorExtension', () => {
   });
 
   it('renders correctly when isEnabled is true', async () => {
-    isEnabledMock.mockResolvedValue(true);
+    isEnabledMock.mockReturnValue(of(true));
     getComponentMock.mockReturnValue(<div>Test Component</div>);
     getBannerMock.mockReturnValue(<div>Test Banner</div>);
 
@@ -72,7 +59,7 @@ describe('QueryEditorExtension', () => {
   });
 
   it('does not render when isEnabled is false', async () => {
-    isEnabledMock.mockResolvedValue(false);
+    isEnabledMock.mockReturnValue(of(false));
     getComponentMock.mockReturnValue(<div>Test Component</div>);
 
     const { queryByText } = render(<QueryEditorExtension {...defaultProps} />);

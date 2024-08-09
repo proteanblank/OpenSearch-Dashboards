@@ -39,13 +39,14 @@ import {
   EuiFlexItem,
   EuiLink,
   EuiSuperDatePicker,
-  EuiFieldText,
+  EuiCompressedFieldText,
   prettyDuration,
 } from '@elastic/eui';
 // @ts-ignore
-import { EuiSuperUpdateButton, OnRefreshProps } from '@elastic/eui';
+import { EuiSuperUpdateButton, OnRefreshProps, EuiText } from '@elastic/eui';
 import { FormattedMessage } from '@osd/i18n/react';
 import { Toast } from 'src/core/public';
+import { createPortal } from 'react-dom';
 import { IDataPluginServices, IIndexPattern, TimeRange, TimeHistoryContract, Query } from '../..';
 import {
   useOpenSearchDashboards,
@@ -70,7 +71,7 @@ export interface QueryBarTopRowProps {
   screenTitle?: string;
   indexPatterns?: Array<IIndexPattern | string>;
   isLoading?: boolean;
-  prepend?: React.ComponentProps<typeof EuiFieldText>['prepend'];
+  prepend?: React.ComponentProps<typeof EuiCompressedFieldText>['prepend'];
   showQueryInput?: boolean;
   showDatePicker?: boolean;
   dateRangeFrom?: string;
@@ -83,6 +84,7 @@ export interface QueryBarTopRowProps {
   isDirty: boolean;
   timeHistory?: TimeHistoryContract;
   indicateNoData?: boolean;
+  datePickerRef?: React.RefObject<HTMLDivElement>;
 }
 
 // Needed for React.lazy
@@ -262,7 +264,7 @@ export default function QueryBarTopRow(props: QueryBarTopRowProps) {
 
     return (
       <NoDataPopover storage={storage} showNoDataPopover={props.indicateNoData}>
-        <EuiFlexGroup responsive={false} gutterSize="s">
+        <EuiFlexGroup responsive={false} gutterSize="s" alignItems="flexStart">
           {renderDatePicker()}
           <EuiFlexItem grow={false}>{button}</EuiFlexItem>
         </EuiFlexGroup>
@@ -338,23 +340,25 @@ export default function QueryBarTopRow(props: QueryBarTopRowProps) {
         }),
         text: toMountPoint(
           <div>
-            <p>
-              <FormattedMessage
-                id="data.query.queryBar.luceneSyntaxWarningMessage"
-                defaultMessage="It looks like you may be trying to use Lucene query syntax, although you
+            <EuiText size="s">
+              <p>
+                <FormattedMessage
+                  id="data.query.queryBar.luceneSyntaxWarningMessage"
+                  defaultMessage="It looks like you may be trying to use Lucene query syntax, although you
                have opensearchDashboards Query Language (DQL) selected. Please review the DQL docs {link}."
-                values={{
-                  link: (
-                    <EuiLink href={osdDQLDocs} target="_blank">
-                      <FormattedMessage
-                        id="data.query.queryBar.syntaxOptionsDescription.docsLinkText"
-                        defaultMessage="here"
-                      />
-                    </EuiLink>
-                  ),
-                }}
-              />
-            </p>
+                  values={{
+                    link: (
+                      <EuiLink href={osdDQLDocs} target="_blank">
+                        <FormattedMessage
+                          id="data.query.queryBar.syntaxOptionsDescription.docsLinkText"
+                          defaultMessage="here"
+                        />
+                      </EuiLink>
+                    ),
+                  }}
+                />
+              </p>
+            </EuiText>
             <EuiFlexGroup justifyContent="flexEnd" gutterSize="s">
               <EuiFlexItem grow={false}>
                 <EuiButton size="s" onClick={() => onLuceneSyntaxWarningOptOut(toast)}>
@@ -391,7 +395,11 @@ export default function QueryBarTopRow(props: QueryBarTopRowProps) {
       >
         {renderQueryInput()}
         {renderSharingMetaFields()}
-        <EuiFlexItem grow={false}>{renderUpdateButton()}</EuiFlexItem>
+        <EuiFlexItem grow={false}>
+          {props?.datePickerRef?.current && uiSettings.get(UI_SETTINGS.QUERY_ENHANCEMENTS_ENABLED)
+            ? createPortal(renderUpdateButton(), props.datePickerRef.current)
+            : renderUpdateButton()}
+        </EuiFlexItem>
       </EuiFlexGroup>
     </>
   );

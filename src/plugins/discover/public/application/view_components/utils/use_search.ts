@@ -82,6 +82,8 @@ export const useSearch = (services: DiscoverViewServices) => {
     core,
     toastNotifications,
     osdUrlStateStorage,
+    chrome,
+    uiSettings,
   } = services;
   const timefilter = data.query.timefilter.timefilter;
   const fetchStateRef = useRef<{
@@ -249,7 +251,8 @@ export const useSearch = (services: DiscoverViewServices) => {
       timefilter.getFetch$(),
       timefilter.getTimeUpdate$(),
       timefilter.getAutoRefreshFetch$(),
-      data.query.queryString.getUpdates$()
+      data.query.queryString.getUpdates$(),
+      data.query.dataSetManager.getUpdates$()
     ).pipe(debounceTime(100));
 
     const subscription = fetch$.subscribe(() => {
@@ -279,6 +282,7 @@ export const useSearch = (services: DiscoverViewServices) => {
     fetch,
     core.fatalErrors,
     shouldSearchOnPageLoad,
+    data.query.dataSetManager,
   ]);
 
   // Get savedSearch if it exists
@@ -308,7 +312,10 @@ export const useSearch = (services: DiscoverViewServices) => {
         chrome.recentlyAccessed.add(
           savedSearchInstance.getFullPath(),
           savedSearchInstance.title,
-          savedSearchInstance.id
+          savedSearchInstance.id,
+          {
+            type: savedSearchInstance.getOpenSearchType(),
+          }
         );
       }
     })();
@@ -321,13 +328,13 @@ export const useSearch = (services: DiscoverViewServices) => {
 
   useEffect(() => {
     // syncs `_g` portion of url with query services
-    const { stop } = syncQueryStateWithUrl(data.query, osdUrlStateStorage);
+    const { stop } = syncQueryStateWithUrl(data.query, osdUrlStateStorage, uiSettings);
 
     return () => stop();
 
     // this effect should re-run when pathname is changed to preserve querystring part,
     // so the global state is always preserved
-  }, [data.query, osdUrlStateStorage, pathname]);
+  }, [data.query, osdUrlStateStorage, pathname, uiSettings]);
 
   return {
     data$,

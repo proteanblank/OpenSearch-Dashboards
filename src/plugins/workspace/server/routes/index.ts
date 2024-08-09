@@ -9,6 +9,7 @@ import { WorkspacePermissionMode } from '../../common/constants';
 import { IWorkspaceClientImpl, WorkspaceAttributeWithPermission } from '../types';
 import { SavedObjectsPermissionControlContract } from '../permission_control/client';
 import { registerDuplicateRoute } from './duplicate';
+import { transferCurrentUserInPermissions } from '../utils';
 
 export const WORKSPACES_API_BASE_URL = '/api/workspaces';
 
@@ -29,6 +30,13 @@ const workspacePermissions = schema.recordOf(
   schema.recordOf(principalType, schema.arrayOf(schema.string()), {})
 );
 
+const dataSourceIds = schema.arrayOf(schema.string());
+
+const settingsSchema = schema.object({
+  permissions: schema.maybe(workspacePermissions),
+  dataSources: schema.maybe(dataSourceIds),
+});
+
 const workspaceOptionalAttributesSchema = {
   description: schema.maybe(schema.string()),
   features: schema.maybe(schema.arrayOf(schema.string())),
@@ -38,13 +46,21 @@ const workspaceOptionalAttributesSchema = {
   reserved: schema.maybe(schema.boolean()),
 };
 
+const workspaceNameSchema = schema.string({
+  validate(value) {
+    if (!value || value.trim().length === 0) {
+      return "can't be empty or blank.";
+    }
+  },
+});
+
 const createWorkspaceAttributesSchema = schema.object({
-  name: schema.string(),
+  name: workspaceNameSchema,
   ...workspaceOptionalAttributesSchema,
 });
 
 const updateWorkspaceAttributesSchema = schema.object({
-  name: schema.maybe(schema.string()),
+  name: schema.maybe(workspaceNameSchema),
   ...workspaceOptionalAttributesSchema,
 });
 
@@ -127,31 +143,29 @@ export function registerRoutes({
       validate: {
         body: schema.object({
           attributes: createWorkspaceAttributesSchema,
-          permissions: schema.maybe(workspacePermissions),
+          settings: settingsSchema,
         }),
       },
     },
     router.handleLegacyErrors(async (context, req, res) => {
-      const { attributes, permissions } = req.body;
+      const { attributes, settings } = req.body;
       const principals = permissionControlClient?.getPrincipalsFromRequest(req);
-      const createPayload: Omit<WorkspaceAttributeWithPermission, 'id'> = attributes;
+      const createPayload: Omit<WorkspaceAttributeWithPermission, 'id'> & {
+        dataSources?: string[];
+      } = attributes;
 
       if (isPermissionControlEnabled) {
-        createPayload.permissions = permissions;
-        // Assign workspace owner to current user
+        createPayload.permissions = settings.permissions;
         if (!!principals?.users?.length) {
-          const acl = new ACL(permissions);
           const currentUserId = principals.users[0];
-          [WorkspacePermissionMode.Write, WorkspacePermissionMode.LibraryWrite].forEach(
-            (permissionMode) => {
-              if (!acl.hasPermission([permissionMode], { users: [currentUserId] })) {
-                acl.addPermission([permissionMode], { users: [currentUserId] });
-              }
-            }
+          const acl = new ACL(
+            transferCurrentUserInPermissions(currentUserId, settings.permissions)
           );
           createPayload.permissions = acl.getPermissions();
         }
       }
+
+      createPayload.dataSources = settings.dataSources;
 
       const result = await client.create(
         {
@@ -173,13 +187,13 @@ export function registerRoutes({
         }),
         body: schema.object({
           attributes: updateWorkspaceAttributesSchema,
-          permissions: schema.maybe(workspacePermissions),
+          settings: settingsSchema,
         }),
       },
     },
     router.handleLegacyErrors(async (context, req, res) => {
       const { id } = req.params;
-      const { attributes, permissions } = req.body;
+      const { attributes, settings } = req.body;
 
       const result = await client.update(
         {
@@ -190,7 +204,8 @@ export function registerRoutes({
         id,
         {
           ...attributes,
-          ...(isPermissionControlEnabled ? { permissions } : {}),
+          ...(isPermissionControlEnabled ? { permissions: settings.permissions } : {}),
+          ...{ dataSources: settings.dataSources },
         }
       );
       return res.ok({ body: result });

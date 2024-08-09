@@ -30,7 +30,7 @@
 
 import React from 'react';
 import { i18n } from '@osd/i18n';
-import { EuiFlexGroup, EuiToolTip, EuiFlexItem, EuiTitle, EuiButtonIcon } from '@elastic/eui';
+import { EuiFlexGroup, EuiToolTip, EuiFlexItem, EuiSmallButtonIcon, EuiText } from '@elastic/eui';
 import { IIndexPattern } from 'src/plugins/data/public';
 
 interface IndexHeaderProps {
@@ -81,16 +81,16 @@ export function IndexHeader({
   return (
     <EuiFlexGroup justifyContent="spaceBetween" alignItems="center">
       <EuiFlexItem>
-        <EuiTitle>
+        <EuiText size="s">
           <h1 data-test-subj="indexPatternTitle">{indexPattern.title}</h1>
-        </EuiTitle>
+        </EuiText>
       </EuiFlexItem>
       <EuiFlexItem grow={false}>
         <EuiFlexGroup responsive={false}>
           {defaultIndex !== indexPattern.id && setDefault && (
             <EuiFlexItem>
               <EuiToolTip content={setDefaultTooltip}>
-                <EuiButtonIcon
+                <EuiSmallButtonIcon
                   color="text"
                   onClick={setDefault}
                   iconType="starFilled"
@@ -104,7 +104,7 @@ export function IndexHeader({
           {refreshFields && (
             <EuiFlexItem>
               <EuiToolTip content={refreshTooltip}>
-                <EuiButtonIcon
+                <EuiSmallButtonIcon
                   color="text"
                   onClick={refreshFields}
                   iconType="refresh"
@@ -118,7 +118,7 @@ export function IndexHeader({
           {deleteIndexPatternClick && (
             <EuiFlexItem>
               <EuiToolTip content={removeTooltip}>
-                <EuiButtonIcon
+                <EuiSmallButtonIcon
                   color="danger"
                   onClick={deleteIndexPatternClick}
                   iconType="trash"

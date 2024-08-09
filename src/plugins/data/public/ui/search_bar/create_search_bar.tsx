@@ -48,7 +48,7 @@ interface StatefulSearchBarDeps {
   data: Omit<DataPublicPluginStart, 'ui'>;
   storage: IStorageWrapper;
   settings: Settings;
-  setContainerRef: (ref: HTMLDivElement | null) => void;
+  setDataSetContainerRef: (ref: HTMLDivElement | null) => void;
 }
 
 export type StatefulSearchBarProps = SearchBarOwnProps & {
@@ -138,7 +138,7 @@ export function createSearchBar({
   storage,
   data,
   settings,
-  setContainerRef,
+  setDataSetContainerRef,
 }: StatefulSearchBarDeps) {
   // App name should come from the core application service.
   // Until it's available, we'll ask the user to provide it for the pre-wired component.
@@ -174,9 +174,9 @@ export function createSearchBar({
       notifications: core.notifications,
     });
 
-    const containerRef = useCallback((node) => {
+    const dataSetContainerRef = useCallback((node) => {
       if (node) {
-        setContainerRef(node);
+        setDataSetContainerRef(node);
       }
     }, []);
 
@@ -210,7 +210,6 @@ export function createSearchBar({
           showSaveQuery={props.showSaveQuery}
           screenTitle={props.screenTitle}
           indexPatterns={props.indexPatterns}
-          dataSource={props.dataSource}
           indicateNoData={props.indicateNoData}
           timeHistory={data.query.timefilter.history}
           dateRangeFrom={timeRange.from}
@@ -220,7 +219,7 @@ export function createSearchBar({
           filters={filters}
           query={query}
           settings={settings}
-          containerRef={containerRef}
+          dataSetContainerRef={dataSetContainerRef}
           onFiltersUpdated={defaultFiltersUpdated(data.query)}
           onRefreshChange={defaultOnRefreshChange(data.query)}
           savedQuery={savedQuery}
@@ -228,6 +227,7 @@ export function createSearchBar({
           onClearSavedQuery={defaultOnClearSavedQuery(props, clearSavedQuery)}
           onSavedQueryUpdated={defaultOnSavedQueryUpdated(props, setSavedQuery)}
           onSaved={defaultOnSavedQueryUpdated(props, setSavedQuery)}
+          datePickerRef={props.datePickerRef}
           {...overrideDefaultBehaviors(props)}
         />
       </OpenSearchDashboardsContextProvider>

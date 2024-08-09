@@ -28,8 +28,10 @@
  * under the License.
  */
 
+import React from 'react';
 import { i18n } from '@osd/i18n';
 import { BehaviorSubject } from 'rxjs';
+import { first } from 'rxjs/operators';
 import { ManagementSetup, ManagementStart } from './types';
 import { HomePublicPluginSetup } from '../../home/public';
 import {
@@ -42,6 +44,9 @@ import {
   AppUpdater,
   AppStatus,
   AppNavLinkStatus,
+  DEFAULT_NAV_GROUPS,
+  WorkspaceAvailability,
+  ChromeNavLink,
 } from '../../../core/public';
 
 import { MANAGEMENT_APP_ID } from '../common/contants';
@@ -50,6 +55,13 @@ import {
   getSectionsServiceStartPrivate,
 } from './management_sections_service';
 import { ManagementOverViewPluginSetup } from '../../management_overview/public';
+import { toMountPoint } from '../../opensearch_dashboards_react/public';
+import { SettingsIcon } from './components/settings_icon';
+import {
+  fulfillRegistrationLinksToChromeNavLinks,
+  LinkItemType,
+  getSortedNavLinks,
+} from '../../../core/public';
 
 interface ManagementSetupDependencies {
   home?: HomePublicPluginSetup;
@@ -79,17 +91,158 @@ export class ManagementPlugin implements Plugin<ManagementSetup, ManagementStart
       icon: '/ui/logos/opensearch_mark.svg',
       category: DEFAULT_APP_CATEGORIES.management,
       updater$: this.appUpdater,
+      navLinkStatus: core.chrome.navGroup.getNavGroupEnabled()
+        ? AppNavLinkStatus.hidden
+        : AppNavLinkStatus.default,
       async mount(params: AppMountParameters) {
         const { renderApp } = await import('./application');
         const [coreStart] = await core.getStartServices();
+        const hideInAppNavigation = core.chrome.navGroup.getNavGroupEnabled();
 
         return renderApp(params, {
           sections: getSectionsServiceStartPrivate(),
           opensearchDashboardsVersion,
           setBreadcrumbs: coreStart.chrome.setBreadcrumbs,
+          hideInAppNavigation,
         });
       },
     });
+
+    const settingsLandingPageId = 'settings_landing';
+
+    const settingsLandingPageTitle = i18n.translate('management.settings.landingPage.title', {
+      defaultMessage: 'Settings and setup',
+    });
+
+    const dataAdministrationLandingPageId = 'data_administration_landing';
+
+    const dataAdministrationPageTitle = i18n.translate(
+      'management.dataAdministration.landingPage.title',
+      {
+        defaultMessage: 'Data administration',
+      }
+    );
+
+    const getNavLinksByNavGroupId = async (navGroupId: string) => {
+      const [coreStart] = await core.getStartServices();
+      const navGroupMap = await coreStart.chrome.navGroup
+        .getNavGroupsMap$()
+        .pipe(first())
+        .toPromise();
+      const navLinks = navGroupMap[navGroupId]?.navLinks;
+      return getSortedNavLinks(
+        fulfillRegistrationLinksToChromeNavLinks(
+          navLinks || [],
+          coreStart.chrome.navLinks.getAll()
+        ).filter((item) => !item.hidden),
+        (currentItem, parentItem) => {
+          // Hide all the sub items because we will only show parent item in landing page.
+          if (
+            currentItem.itemType === LinkItemType.LINK &&
+            parentItem?.itemType === LinkItemType.PARENT_LINK
+          ) {
+            return {
+              ...currentItem,
+              link: {
+                ...currentItem.link,
+                hidden: true,
+              },
+            };
+          }
+
+          /**
+           * Jump to first sub items when click on parent item in landing page
+           */
+          if (currentItem.itemType === LinkItemType.PARENT_LINK) {
+            let payload = currentItem.link;
+            if (payload) {
+              if (currentItem.links?.[0].itemType === LinkItemType.LINK) {
+                payload = {
+                  ...payload,
+                  ...currentItem.links?.[0].link,
+                  title: payload.title,
+                };
+              }
+            }
+
+            return {
+              ...currentItem,
+              link: payload,
+            };
+          }
+
+          return currentItem;
+        }
+      ).filter((navLink) => !navLink.hidden);
+    };
+
+    core.application.register({
+      id: settingsLandingPageId,
+      title: settingsLandingPageTitle,
+      order: 100,
+      navLinkStatus: core.chrome.navGroup.getNavGroupEnabled()
+        ? AppNavLinkStatus.visible
+        : AppNavLinkStatus.hidden,
+      workspaceAvailability: WorkspaceAvailability.outsideWorkspace,
+      mount: async (params: AppMountParameters) => {
+        const { renderApp } = await import('./landing_page_application');
+        const [coreStart] = await core.getStartServices();
+        const navLinks = (
+          await getNavLinksByNavGroupId(DEFAULT_NAV_GROUPS.settingsAndSetup.id)
+        ).filter((navLink) => navLink.id !== settingsLandingPageId);
+
+        return renderApp({
+          mountElement: params.element,
+          props: {
+            navigateToApp: coreStart.application.navigateToApp,
+            navLinks,
+            pageTitle: settingsLandingPageTitle,
+            getStartedCards: [],
+          },
+        });
+      },
+    });
+
+    core.application.register({
+      id: dataAdministrationLandingPageId,
+      title: dataAdministrationPageTitle,
+      order: 100,
+      navLinkStatus: core.chrome.navGroup.getNavGroupEnabled()
+        ? AppNavLinkStatus.visible
+        : AppNavLinkStatus.hidden,
+      workspaceAvailability: WorkspaceAvailability.outsideWorkspace,
+      mount: async (params: AppMountParameters) => {
+        const { renderApp } = await import('./landing_page_application');
+        const [coreStart] = await core.getStartServices();
+        const navLinks = (
+          await getNavLinksByNavGroupId(DEFAULT_NAV_GROUPS.dataAdministration.id)
+        ).filter((navLink) => navLink.id !== dataAdministrationLandingPageId);
+
+        return renderApp({
+          mountElement: params.element,
+          props: {
+            navigateToApp: coreStart.application.navigateToApp,
+            navLinks,
+            pageTitle: dataAdministrationPageTitle,
+            getStartedCards: [],
+          },
+        });
+      },
+    });
+
+    core.chrome.navGroup.addNavLinksToGroup(DEFAULT_NAV_GROUPS.settingsAndSetup, [
+      {
+        id: settingsLandingPageId,
+        order: 0,
+      },
+    ]);
+
+    core.chrome.navGroup.addNavLinksToGroup(DEFAULT_NAV_GROUPS.dataAdministration, [
+      {
+        id: dataAdministrationLandingPageId,
+        order: 0,
+      },
+    ]);
 
     managementOverview?.register({
       id: MANAGEMENT_APP_ID,
@@ -112,12 +265,29 @@ export class ManagementPlugin implements Plugin<ManagementSetup, ManagementStart
       .getSectionsEnabled()
       .some((section) => section.getAppsEnabled().length > 0);
 
-    if (!this.hasAnyEnabledApps) {
+    if (core.chrome.navGroup.getNavGroupEnabled()) {
+      this.appUpdater.next(() => {
+        return {
+          navLinkStatus: AppNavLinkStatus.hidden,
+        };
+      });
+    } else if (!this.hasAnyEnabledApps) {
       this.appUpdater.next(() => {
         return {
           status: AppStatus.inaccessible,
           navLinkStatus: AppNavLinkStatus.hidden,
         };
+      });
+    }
+
+    if (core.chrome.navGroup.getNavGroupEnabled()) {
+      core.chrome.navControls.registerLeftBottom({
+        order: 3,
+        mount: toMountPoint(
+          React.createElement(SettingsIcon, {
+            core,
+          })
+        ),
       });
     }
 

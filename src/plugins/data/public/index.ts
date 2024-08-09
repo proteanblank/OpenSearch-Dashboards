@@ -437,8 +437,15 @@ export {
   IndexPatternSelectProps,
   QueryStringInput,
   QueryStringInputProps,
+  QueryEditor,
+  QueryEditorExtensionConfig,
+  QueryEditorExtensions,
+  QueryEditorExtensionDependencies,
+  QueryEditorProps,
+  QueryEditorTopRow,
   // for BWC, keeping the old name
   IUiStart as DataPublicPluginStartUi,
+  DataSetNavigator,
 } from './ui';
 
 /**
@@ -455,6 +462,8 @@ export {
   QueryState,
   getDefaultQuery,
   FilterManager,
+  DataSetManager,
+  DataSetContract,
   SavedQuery,
   SavedQueryService,
   SavedQueryTimeFilter,

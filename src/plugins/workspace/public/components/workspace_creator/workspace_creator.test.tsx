@@ -5,11 +5,15 @@
 
 import React from 'react';
 import { PublicAppInfo } from 'opensearch-dashboards/public';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor, act } from '@testing-library/react';
 import { BehaviorSubject } from 'rxjs';
-import { WorkspaceCreator as WorkspaceCreatorComponent } from './workspace_creator';
+import {
+  WorkspaceCreator as WorkspaceCreatorComponent,
+  WorkspaceCreatorProps,
+} from './workspace_creator';
 import { coreMock } from '../../../../../core/public/mocks';
 import { createOpenSearchDashboardsReactContext } from '../../../../opensearch_dashboards_react/public';
+import { WORKSPACE_USE_CASES } from '../../../common/constants';
 
 const workspaceClientCreate = jest
   .fn()
@@ -23,9 +27,30 @@ const PublicAPPInfoMap = new Map([
   ['dashboards', { id: 'dashboards', title: 'Dashboards' }],
 ]);
 
+const dataSourcesList = [
+  {
+    id: 'id1',
+    title: 'ds1',
+    // This is used for mocking saved object function
+    get: () => {
+      return 'ds1';
+    },
+  },
+  {
+    id: '2',
+    title: 'ds2',
+    get: () => {
+      return 'ds2';
+    },
+  },
+];
+
 const mockCoreStart = coreMock.createStart();
 
-const WorkspaceCreator = (props: any) => {
+const WorkspaceCreator = ({
+  isDashboardAdmin = false,
+  ...props
+}: Partial<WorkspaceCreatorProps & { isDashboardAdmin: boolean }>) => {
   const { Provider } = createOpenSearchDashboardsReactContext({
     ...mockCoreStart,
     ...{
@@ -36,9 +61,12 @@ const WorkspaceCreator = (props: any) => {
           workspaces: {
             permissionEnabled: true,
           },
+          dashboards: {
+            isDashboardAdmin,
+          },
         },
         navigateToApp,
-        getUrlForApp: jest.fn(() => '/app/workspace_overview'),
+        getUrlForApp: jest.fn(() => '/app/workspace_detail'),
         applications$: new BehaviorSubject<Map<string, PublicAppInfo>>(PublicAPPInfoMap as any),
       },
       notifications: {
@@ -53,12 +81,28 @@ const WorkspaceCreator = (props: any) => {
         ...mockCoreStart.workspaces,
         create: workspaceClientCreate,
       },
+      savedObjects: {
+        ...mockCoreStart.savedObjects,
+        client: {
+          ...mockCoreStart.savedObjects.client,
+          find: jest.fn().mockResolvedValue({
+            savedObjects: dataSourcesList,
+          }),
+        },
+      },
+      dataSourceManagement: {},
     },
   });
+  const registeredUseCases$ = new BehaviorSubject([
+    WORKSPACE_USE_CASES.observability,
+    WORKSPACE_USE_CASES['security-analytics'],
+    WORKSPACE_USE_CASES.essentials,
+    WORKSPACE_USE_CASES.search,
+  ]);
 
   return (
     <Provider>
-      <WorkspaceCreatorComponent {...props} />
+      <WorkspaceCreatorComponent {...props} registeredUseCases$={registeredUseCases$} />
     </Provider>
   );
 };
@@ -91,21 +135,13 @@ describe('WorkspaceCreator', () => {
   });
 
   it('should not create workspace when name is empty', async () => {
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     fireEvent.click(getByTestId('workspaceForm-bottomBar-createButton'));
     expect(workspaceClientCreate).not.toHaveBeenCalled();
   });
 
   it('should not create workspace with invalid name', async () => {
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: '~' },
@@ -115,11 +151,7 @@ describe('WorkspaceCreator', () => {
 
   it('should not create workspace without use cases', async () => {
     setHrefSpy.mockReset();
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: 'test workspace name' },
@@ -130,11 +162,7 @@ describe('WorkspaceCreator', () => {
   });
 
   it('cancel create workspace', async () => {
-    const { findByText, getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { findByText, getByTestId } = render(<WorkspaceCreator />);
     fireEvent.click(getByTestId('workspaceForm-bottomBar-cancelButton'));
     await findByText('Discard changes?');
     fireEvent.click(getByTestId('confirmModalConfirmButton'));
@@ -142,11 +170,7 @@ describe('WorkspaceCreator', () => {
   });
 
   it('create workspace with detailed information', async () => {
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: 'test workspace name' },
@@ -170,7 +194,13 @@ describe('WorkspaceCreator', () => {
         description: 'test workspace description',
         features: expect.arrayContaining(['use-case-observability']),
       }),
-      undefined
+      {
+        dataSources: [],
+        permissions: {
+          library_write: { users: ['%me%'] },
+          write: { users: ['%me%'] },
+        },
+      }
     );
     await waitFor(() => {
       expect(notificationToastsAddSuccess).toHaveBeenCalled();
@@ -180,11 +210,7 @@ describe('WorkspaceCreator', () => {
 
   it('should show danger toasts after create workspace failed', async () => {
     workspaceClientCreate.mockReturnValueOnce({ result: { id: 'failResult' }, success: false });
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: 'test workspace name' },
@@ -202,11 +228,7 @@ describe('WorkspaceCreator', () => {
     workspaceClientCreate.mockImplementationOnce(async () => {
       throw new Error();
     });
-    const { getByTestId } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: 'test workspace name' },
@@ -221,34 +243,66 @@ describe('WorkspaceCreator', () => {
   });
 
   it('create workspace with customized permissions', async () => {
-    const { getByTestId, getAllByText } = render(
-      <WorkspaceCreator
-        workspaceConfigurableApps$={new BehaviorSubject([...PublicAPPInfoMap.values()])}
-      />
-    );
+    const { getByTestId } = render(<WorkspaceCreator />);
     const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
     fireEvent.input(nameInput, {
       target: { value: 'test workspace name' },
     });
     fireEvent.click(getByTestId('workspaceUseCase-observability'));
     fireEvent.click(getByTestId('workspaceForm-permissionSettingPanel-user-addNew'));
-    const userIdInput = getAllByText('Select')[0];
-    fireEvent.click(userIdInput);
-    fireEvent.input(getByTestId('comboBoxSearchInput'), {
-      target: { value: 'test user id' },
-    });
-    fireEvent.blur(getByTestId('comboBoxSearchInput'));
     fireEvent.click(getByTestId('workspaceForm-bottomBar-createButton'));
     expect(workspaceClientCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'test workspace name',
       }),
       {
-        read: {
-          users: ['test user id'],
+        dataSources: [],
+        permissions: {
+          write: {
+            users: ['%me%'],
+          },
+          library_write: {
+            users: ['%me%'],
+          },
         },
-        library_read: {
-          users: ['test user id'],
+      }
+    );
+    await waitFor(() => {
+      expect(notificationToastsAddSuccess).toHaveBeenCalled();
+    });
+    expect(notificationToastsAddDanger).not.toHaveBeenCalled();
+  });
+
+  it('create workspace with customized selected dataSources', async () => {
+    const { getByTestId, getByTitle, getByText } = render(
+      <WorkspaceCreator isDashboardAdmin={true} />
+    );
+    const nameInput = getByTestId('workspaceForm-workspaceDetails-nameInputText');
+    fireEvent.input(nameInput, {
+      target: { value: 'test workspace name' },
+    });
+    fireEvent.click(getByTestId('workspaceUseCase-observability'));
+    fireEvent.click(getByTestId('workspaceForm-select-dataSource-addNew'));
+    fireEvent.click(getByTestId('workspaceForm-select-dataSource-comboBox'));
+    await act(() => {
+      fireEvent.click(getByText('Select'));
+    });
+    fireEvent.click(getByTitle(dataSourcesList[0].title));
+
+    fireEvent.click(getByTestId('workspaceForm-bottomBar-createButton'));
+    expect(workspaceClientCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test workspace name',
+      }),
+      {
+        dataSources: ['id1'],
+        permissions: {
+          library_write: {
+            users: ['%me%'],
+          },
+          write: {
+            users: ['%me%'],
+          },
         },
       }
     );

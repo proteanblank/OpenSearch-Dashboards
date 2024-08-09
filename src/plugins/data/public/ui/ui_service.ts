@@ -8,6 +8,7 @@ import { CoreSetup, CoreStart, Plugin, PluginInitializerContext } from 'src/core
 import { IStorageWrapper } from '../../../opensearch_dashboards_utils/public';
 import { ConfigSchema } from '../../config';
 import { DataPublicPluginStart } from '../types';
+import { createDataSetNavigator } from './dataset_navigator';
 import { createIndexPatternSelect } from './index_pattern_select';
 import { QueryEditorExtensionConfig } from './query_editor';
 import { createSearchBar } from './search_bar/create_search_bar';
@@ -29,7 +30,7 @@ export class UiService implements Plugin<IUiSetup, IUiStart> {
   enhancementsConfig: ConfigSchema['enhancements'];
   private queryEnhancements: Map<string, QueryEnhancement> = new Map();
   private queryEditorExtensionMap: Record<string, QueryEditorExtensionConfig> = {};
-  private container$ = new BehaviorSubject<HTMLDivElement | null>(null);
+  private dataSetContainer$ = new BehaviorSubject<HTMLDivElement | null>(null);
 
   constructor(initializerContext: PluginInitializerContext<ConfigSchema>) {
     const { enhancements } = initializerContext.config.get<ConfigSchema>();
@@ -41,7 +42,6 @@ export class UiService implements Plugin<IUiSetup, IUiStart> {
     return {
       __enhance: (enhancements?: UiEnhancements) => {
         if (!enhancements) return;
-        if (!this.enhancementsConfig.enabled) return;
         if (enhancements.query && enhancements.query.language) {
           this.queryEnhancements.set(enhancements.query.language, enhancements.query);
         }
@@ -62,8 +62,8 @@ export class UiService implements Plugin<IUiSetup, IUiStart> {
       queryEditorExtensionMap: this.queryEditorExtensionMap,
     });
 
-    const setContainerRef = (ref: HTMLDivElement | null) => {
-      this.container$.next(ref);
+    const setDataSetContainerRef = (ref: HTMLDivElement | null) => {
+      this.dataSetContainer$.next(ref);
     };
 
     const SearchBar = createSearchBar({
@@ -71,15 +71,20 @@ export class UiService implements Plugin<IUiSetup, IUiStart> {
       data: dataServices,
       storage,
       settings: Settings,
-      setContainerRef,
+      setDataSetContainerRef,
     });
 
     return {
       IndexPatternSelect: createIndexPatternSelect(core.savedObjects.client),
+      DataSetNavigator: createDataSetNavigator(
+        core.savedObjects.client,
+        core.http,
+        dataServices.query.dataSetManager
+      ),
       SearchBar,
       SuggestionsComponent,
       Settings,
-      container$: this.container$,
+      dataSetContainer$: this.dataSetContainer$,
     };
   }
 

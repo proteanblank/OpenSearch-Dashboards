@@ -7,14 +7,14 @@ import React, { useState } from 'react';
 
 import {
   EuiSpacer,
-  EuiTitle,
   EuiFlexItem,
   EuiFlexGroup,
   EuiToolTip,
-  EuiButtonIcon,
+  EuiSmallButtonIcon,
   EuiConfirmModal,
-  EuiButton,
-  EuiButtonEmpty,
+  EuiSmallButton,
+  EuiSmallButtonEmpty,
+  EuiText,
 } from '@elastic/eui';
 import { i18n } from '@osd/i18n';
 import { FormattedMessage } from '@osd/i18n/react';
@@ -29,6 +29,7 @@ export const Header = ({
   onClickSetDefault,
   dataSourceName,
   isDefault,
+  canManageDataSource,
 }: {
   showDeleteIcon: boolean;
   isFormValid: boolean;
@@ -37,6 +38,7 @@ export const Header = ({
   onClickSetDefault: () => void;
   dataSourceName: string;
   isDefault: boolean;
+  canManageDataSource: boolean;
 }) => {
   /* State Variables */
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
@@ -56,7 +58,7 @@ export const Header = ({
 
   const renderDefaultIcon = () => {
     return (
-      <EuiButtonEmpty
+      <EuiSmallButtonEmpty
         onClick={() => {
           onClickSetDefault();
           setIsDefaultDataSourceState(!isDefaultDataSourceState);
@@ -67,7 +69,7 @@ export const Header = ({
         data-test-subj="editSetDefaultDataSource"
       >
         {isDefaultDataSourceState ? 'Default' : 'Set as default'}
-      </EuiButtonEmpty>
+      </EuiSmallButtonEmpty>
     );
   };
 
@@ -79,7 +81,7 @@ export const Header = ({
             defaultMessage: 'Delete this Data Source',
           })}
         >
-          <EuiButtonIcon
+          <EuiSmallButtonIcon
             color="danger"
             data-test-subj="editDatasourceDeleteIcon"
             onClick={() => {
@@ -119,22 +121,24 @@ export const Header = ({
             defaultFocusedButton="confirm"
             data-test-subj="editDatasourceDeleteConfirmModal"
           >
-            <p>
-              {
-                <FormattedMessage
-                  id="dataSourcesManagement.editDataSource.deleteConfirmation"
-                  defaultMessage="Any objects created using data from these sources, including Index Patterns, Visualizations, and Observability Panels, will be impacted."
-                />
-              }
-            </p>
-            <p>
-              {
-                <FormattedMessage
-                  id="dataSourcesManagement.editDataSource.deleteWarning"
-                  defaultMessage="This action cannot be undone."
-                />
-              }
-            </p>
+            <EuiText size="s">
+              <p>
+                {
+                  <FormattedMessage
+                    id="dataSourcesManagement.editDataSource.deleteConfirmation"
+                    defaultMessage="Any objects created using data from these sources, including Index Patterns, Visualizations, and Observability Panels, will be impacted."
+                  />
+                }
+              </p>
+              <p>
+                {
+                  <FormattedMessage
+                    id="dataSourcesManagement.editDataSource.deleteWarning"
+                    defaultMessage="This action cannot be undone."
+                  />
+                }
+              </p>
+            </EuiText>
           </EuiConfirmModal>
         ) : null}
       </>
@@ -142,7 +146,7 @@ export const Header = ({
   };
   const renderTestConnectionButton = () => {
     return (
-      <EuiButton
+      <EuiSmallButton
         type="submit"
         fill={false}
         disabled={!isFormValid}
@@ -155,7 +159,7 @@ export const Header = ({
           id="dataSourcesManagement.createDataSource.testConnectionButton"
           defaultMessage="Test connection"
         />
-      </EuiButton>
+      </EuiSmallButton>
     );
   };
 
@@ -164,9 +168,9 @@ export const Header = ({
       {/* Title */}
       <EuiFlexItem grow={false}>
         <div>
-          <EuiTitle data-test-subj="editDataSourceTitle">
+          <EuiText size="s" data-test-subj="editDataSourceTitle">
             <h1>{dataSourceName}</h1>
-          </EuiTitle>
+          </EuiText>
           <EuiSpacer size="s" />
         </div>
       </EuiFlexItem>
@@ -179,7 +183,9 @@ export const Header = ({
           {/* Test connection button */}
           <EuiFlexItem grow={false}>{renderTestConnectionButton()}</EuiFlexItem>
           {/* Delete icon button */}
-          <EuiFlexItem grow={false}>{showDeleteIcon ? renderDeleteButton() : null}</EuiFlexItem>
+          {canManageDataSource ? (
+            <EuiFlexItem grow={false}>{showDeleteIcon ? renderDeleteButton() : null}</EuiFlexItem>
+          ) : null}
         </EuiFlexGroup>
       </EuiFlexItem>
     </EuiFlexGroup>

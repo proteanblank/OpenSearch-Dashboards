@@ -6,21 +6,32 @@
 import { OnPostAuthHandler, OnPreRoutingHandler } from 'src/core/server';
 import { coreMock, httpServerMock } from '../../../core/server/mocks';
 import { WorkspacePlugin } from './plugin';
-import { getWorkspaceState } from '../../../core/server/utils';
+import { getWorkspaceState, updateWorkspaceState } from '../../../core/server/utils';
 import * as utilsExports from './utils';
+import { SavedObjectsPermissionControl } from './permission_control/client';
 
 describe('Workspace server plugin', () => {
   it('#setup', async () => {
     let value;
+    const capabilities = {} as any;
     const setupMock = coreMock.createSetup();
     const initializerContextConfigMock = coreMock.createPluginInitializerContext({
       enabled: true,
     });
+    const request = httpServerMock.createOpenSearchDashboardsRequest();
+
     setupMock.capabilities.registerProvider.mockImplementationOnce((fn) => (value = fn()));
+    setupMock.capabilities.registerSwitcher.mockImplementationOnce((fn) => {
+      return fn(request, capabilities);
+    });
+
     const workspacePlugin = new WorkspacePlugin(initializerContextConfigMock);
     await workspacePlugin.setup(setupMock);
     expect(value).toMatchInlineSnapshot(`
       Object {
+        "dashboards": Object {
+          "isDashboardAdmin": false,
+        },
         "workspaces": Object {
           "enabled": true,
           "permissionEnabled": true,
@@ -28,6 +39,23 @@ describe('Workspace server plugin', () => {
       }
     `);
     expect(setupMock.savedObjects.addClientWrapper).toBeCalledTimes(4);
+
+    let registerSwitcher;
+    let result;
+    updateWorkspaceState(request, { isDashboardAdmin: false });
+    registerSwitcher = setupMock.capabilities.registerSwitcher.mock.calls[0][0];
+    result = registerSwitcher(request, capabilities);
+    expect(result).toEqual({ dashboards: { isDashboardAdmin: false } });
+
+    updateWorkspaceState(request, { isDashboardAdmin: true });
+    registerSwitcher = setupMock.capabilities.registerSwitcher.mock.calls[0][0];
+    result = registerSwitcher(request, capabilities);
+    expect(result).toEqual({ dashboards: { isDashboardAdmin: true } });
+
+    updateWorkspaceState(request, { isDashboardAdmin: undefined });
+    registerSwitcher = setupMock.capabilities.registerSwitcher.mock.calls[0][0];
+    result = registerSwitcher(request, capabilities);
+    expect(result).toEqual({ dashboards: { isDashboardAdmin: true } });
   });
 
   it('#proxyWorkspaceTrafficToRealHandler', async () => {
@@ -129,6 +157,22 @@ describe('Workspace server plugin', () => {
         toolKitMock
       );
       expect(toolKitMock.next).toBeCalledTimes(1);
+    });
+
+    it('should clear saved objects cache', async () => {
+      jest.spyOn(utilsExports, 'getPrincipalsFromRequest').mockImplementation(() => ({}));
+      const clearSavedObjectsCacheMock = jest
+        .spyOn(SavedObjectsPermissionControl.prototype, 'clearSavedObjectsCache')
+        .mockImplementationOnce(() => {});
+
+      await workspacePlugin.setup(setupMock);
+      const toolKitMock = httpServerMock.createToolkit();
+
+      expect(setupMock.http.registerOnPreResponse).toHaveBeenCalled();
+      const preResponseFn = setupMock.http.registerOnPreResponse.mock.calls[0][0];
+
+      preResponseFn(requestWithWorkspaceInUrl, { statusCode: 200 }, toolKitMock);
+      expect(clearSavedObjectsCacheMock).toHaveBeenCalled();
     });
   });
 

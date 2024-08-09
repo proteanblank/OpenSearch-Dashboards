@@ -6,8 +6,7 @@
 import { EuiErrorBoundary } from '@elastic/eui';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { IIndexPattern } from '../../../../common';
-import { DataSource } from '../../../data_sources/datasource';
+import { Observable } from 'rxjs';
 
 interface QueryEditorExtensionProps {
   config: QueryEditorExtensionConfig;
@@ -18,22 +17,26 @@ interface QueryEditorExtensionProps {
 
 export interface QueryEditorExtensionDependencies {
   /**
-   * Currently selected index patterns.
-   */
-  indexPatterns?: Array<IIndexPattern | string>;
-  /**
-   * Currently selected data source.
-   */
-  dataSource?: DataSource;
-  /**
    * Currently selected query language.
    */
   language: string;
+  /**
+   * Change the selected query language.
+   */
+  onSelectLanguage: (language: string) => void;
+  /**
+   * Whether the query editor is collapsed.
+   */
+  isCollapsed: boolean;
+  /**
+   * Set whether the query editor is collapsed.
+   */
+  setIsCollapsed: (isCollapsed: boolean) => void;
 }
 
 export interface QueryEditorExtensionConfig {
   /**
-   * The id for the search bar extension.
+   * The id for the query editor extension.
    */
   id: string;
   /**
@@ -41,26 +44,25 @@ export interface QueryEditorExtensionConfig {
    */
   order: number;
   /**
-   * A function that determines if the search bar extension is enabled and should be rendered on UI.
+   * A function that determines if the query editor extension is enabled and should be rendered on UI.
    * @returns whether the extension is enabled.
    */
-  isEnabled: (dependencies: QueryEditorExtensionDependencies) => Promise<boolean>;
+  isEnabled$: (dependencies: QueryEditorExtensionDependencies) => Observable<boolean>;
   /**
-   * A function that returns the search bar extension component. The component
+   * A function that returns the query editor extension component. The component
    * will be displayed on top of the query editor in the search bar.
    * @param dependencies - The dependencies required for the extension.
-   * @returns The component the search bar extension.
+   * @returns The component the query editor extension.
    */
   getComponent?: (dependencies: QueryEditorExtensionDependencies) => React.ReactElement | null;
   /**
-   * A function that returns the search bar extension banner. The banner is a
+   * A function that returns the query editor extension banner. The banner is a
    * component that will be displayed on top of the search bar.
    * @param dependencies - The dependencies required for the extension.
-   * @returns The component the search bar extension.
+   * @returns The component the query editor extension.
    */
   getBanner?: (dependencies: QueryEditorExtensionDependencies) => React.ReactElement | null;
 }
-
 const QueryEditorExtensionPortal: React.FC<{ container: Element }> = (props) => {
   if (!props.children) return null;
 
@@ -92,9 +94,10 @@ export const QueryEditorExtension: React.FC<QueryEditorExtensionProps> = (props)
   }, []);
 
   useEffect(() => {
-    props.config.isEnabled(props.dependencies).then((enabled) => {
+    const subscription = props.config.isEnabled$(props.dependencies).subscribe((enabled) => {
       if (isMounted.current) setIsEnabled(enabled);
     });
+    return () => subscription.unsubscribe();
   }, [props.dependencies, props.config]);
 
   if (!isEnabled) return null;
